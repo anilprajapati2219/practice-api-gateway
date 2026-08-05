@@ -1,0 +1,52 @@
+HELP.md
+target/
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
+/src/main/frontend/node/
+.env
+docker-compose.yaml
+# Angular build artifacts inside Spring Boot static
+src/main/resources/static/*.js
+src/main/resources/static/*.css
+src/main/resources/static/*.map
+
+# Angular chunks (lazy-loaded)
+src/main/resources/static/*.chunk.js
+src/main/resources/static/*.chunk.css
+
+# Angular assets folder (if fully generated)
+src/main/resources/static/assets/
+
+# Angular index.html (generated)
+src/main/resources/static/index.html
+logs
+/src/main/resources/static/favicon.ico

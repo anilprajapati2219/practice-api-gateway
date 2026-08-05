@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: practice-dashboard-gateway
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: practice-dashboard-gateway
+  template:
+    metadata:
+      labels:
+        app: practice-dashboard-gateway
+    spec:
+      containers:
+        - name: practice-dashboard-gateway
+          image: docker.io/library/practice-dashboard-gateway:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8080
+          env:
+            - name: AZURE_TENANT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: integration-dashboard-db-secret
+                  key: AZURE_TENANT_ID
+
+            - name: AZURE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: integration-dashboard-db-secret
+                  key: AZURE_CLIENT_ID
+
+            - name: PRACTICE_DASHBOARD_SERVICE_URL
+              value: "http://integration-dashboard-service:8081"
+
+            - name: FRONTEND_URL
+              value: "http://integration-dashboard-app:8081"

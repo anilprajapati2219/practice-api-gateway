@@ -1,0 +1,95 @@
+server:
+  port: 8098
+
+spring:
+  application:
+    name: practice-dashboard-gateway
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Azure AD JWT validation endpoint
+          # Replace TENANT_ID with your actual tenant ID
+          jwk-set-uri: https://login.microsoftonline.com/5e45e2ef-d6aa-4ad1-aaca-a7187394a753/discovery/v2.0/keys
+          issuer-uri: https://login.microsoftonline.com/5e45e2ef-d6aa-4ad1-aaca-a7187394a753/v2.0
+
+  cloud:
+    gateway:
+      # Global CORS configuration
+      globalcors:
+        corsConfigurations:
+          '[/**]':
+            allowedOrigins:
+              - "https://practice-dashboard-dev.sandhata.com"
+              - "https://intranet.sandhata.com"
+              - "http://localhost:4200"
+              - "http://localhost:8080"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowedHeaders: "*"
+            allowCredentials: true
+
+      routes:
+
+        # ─── Practice Dashboard Service (main backend) ───────────────────────
+        # All /api/** requests go to the practice dashboard backend service
+        - id: practice-dashboard-service
+          uri: ${PRACTICE_DASHBOARD_SERVICE_URL:http://localhost:8080}
+          predicates:
+            - Path=/api/**
+          filters:
+            # Strip any internal headers from client requests for security
+            - RemoveRequestHeader=X-Internal-Role
+            - RemoveRequestHeader=X-Internal-Email
+
+        # ─── Static Frontend (Angular) ────────────────────────────────────────
+        # All other requests go to the Angular frontend
+        - id: frontend
+          uri: ${FRONTEND_URL:http://localhost:4200}
+          predicates:
+            - Path=/**
+          filters:
+            - RewritePath=/(?<segment>.*), /${segment}
+
+# Azure AD config
+azure:
+  tenant-id: ${AZURE_TENANT_ID}
+  client-id: ${AZURE_CLIENT_ID}
+
+# Role based access configuration
+# Define which roles can access which paths
+role-access:
+  admin-paths:
+    - /api/announcements/add
+    - /api/availability-panel/
+    - /api/availability-panel/**
+  manager-paths:
+    - /api/businessMarketing/**
+    - /api/integration/**
+    - /api/training/**
+    - /api/cross-practice/**
+  viewer-paths:
+    - /api/**
+
+# Logging
+logging:
+  level:
+    root: INFO
+    com.sandhata.gateway: DEBUG
+    org.springframework.cloud.gateway: DEBUG
+    org.springframework.security: DEBUG
+
+# Actuator health endpoint
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
