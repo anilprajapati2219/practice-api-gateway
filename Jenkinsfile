@@ -76,6 +76,7 @@ pipeline {
                       kubectl apply -f k8s/dev/gateway-deployment.yaml -n practice-dashboard-gateway
                       kubectl apply -f k8s/dev/gateway-ingress.yaml -n practice-dashboard-gateway
                       kubectl apply -f k8s/dev/gateway-service.yaml -n practice-dashboard-gateway
+                      kubectl apply -f k8s/dev/gateway-secret.yaml -n practice-dashboard-gateway
 
                       kubectl set image deployment/practice-dashboard-gateway \
                         practice-dashboard-gateway=${IMAGE_NAME}:${IMAGE_TAG} \

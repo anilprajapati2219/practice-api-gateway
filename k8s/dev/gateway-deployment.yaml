@@ -28,13 +28,13 @@ spec:
             - name: AZURE_TENANT_ID
               valueFrom:
                 secretKeyRef:
-                  name: integration-dashboard-db-secret
+                  name: practice-dashboard-gateway-secret
                   key: AZURE_TENANT_ID
 
             - name: AZURE_CLIENT_ID
               valueFrom:
                 secretKeyRef:
-                  name: integration-dashboard-db-secret
+                  name: practice-dashboard-gateway-secret
                   key: AZURE_CLIENT_ID
 
             - name: PRACTICE_DASHBOARD_SERVICE_URL
