@@ -69,7 +69,7 @@ pipeline {
                 IMAGE_TAG = "${env.BUILD_NUMBER}"
             }
             steps {
-                withCredentials([file(credentialsId: 'KUBECONFIG', variable: 'KUBECONFIG')]) {
+                withCredentials([file(credentialsId: 'practice-dashboard-gateway-kubeconfig', variable: 'KUBECONFIG')]) {
 
                     sh '''
                       set -x  
