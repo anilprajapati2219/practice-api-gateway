@@ -2,8 +2,9 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: practice-dashboard-gateway
+  namespace: practice-dashboard-gateway
 spec:
-  replicas: 1
+  replicas: 2
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -22,7 +23,7 @@ spec:
           image: docker.io/library/practice-dashboard-gateway:latest
           imagePullPolicy: Never
           ports:
-            - containerPort: 8080
+            - containerPort: 8098
           env:
             - name: AZURE_TENANT_ID
               valueFrom:
@@ -41,3 +42,15 @@ spec:
 
             - name: FRONTEND_URL
               value: "http://integration-dashboard-app:8081"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8098
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8098
+            initialDelaySeconds: 30
+            periodSeconds: 20
