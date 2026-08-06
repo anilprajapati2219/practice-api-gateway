@@ -70,7 +70,9 @@ pipeline {
             }
             steps {
                 withCredentials([file(credentialsId: 'KUBECONFIG', variable: 'KUBECONFIG')]) {
+
                     sh '''
+                      set -x  
                       kubectl apply -f k8s/dev/gateway-deployment.yaml -n practice-dashboard-gateway
                       kubectl apply -f k8s/dev/gateway-ingress.yaml -n practice-dashboard-gateway
                       kubectl apply -f k8s/dev/gateway-service.yaml -n practice-dashboard-gateway
