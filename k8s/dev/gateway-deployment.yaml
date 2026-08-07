@@ -38,10 +38,10 @@ spec:
                   key: AZURE_CLIENT_ID
 
             - name: PRACTICE_DASHBOARD_SERVICE_URL
-              value: "http://integration-dashboard-service:8081"
+              value: "http://integration-dashboard-service.integration-dashboard-dev.svc.cluster.local:80"
 
             - name: FRONTEND_URL
-              value: "http://integration-dashboard-app:8081"
+              value: "http://integration-dashboard-service.integration-dashboard-dev.svc.cluster.local:80"
           readinessProbe:
             httpGet:
               path: /actuator/health
