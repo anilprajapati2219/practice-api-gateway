@@ -35,31 +35,42 @@ spring:
             allowCredentials: true
 
       routes:
+        # Auth routes handled by gateway itself — no forwarding needed
+        - id: auth-routes
+          uri: http://localhost:8098
+          predicates:
+            - Path=/api/auth/**
 
-        # ─── Practice Dashboard Service (main backend) ───────────────────────
-        # All /api/** requests go to the practice dashboard backend service
         - id: practice-dashboard-service
           uri: ${PRACTICE_DASHBOARD_SERVICE_URL:http://localhost:8080}
           predicates:
             - Path=/api/**
-          filters:
-            # Strip any internal headers from client requests for security
-            - RemoveRequestHeader=X-Internal-Role
-            - RemoveRequestHeader=X-Internal-Email
 
-        # ─── Static Frontend (Angular) ────────────────────────────────────────
-        # All other requests go to the Angular frontend
-        - id: frontend
-          uri: ${FRONTEND_URL:http://localhost:4200}
-          predicates:
-            - Path=/**
-          filters:
-            - RewritePath=/(?<segment>.*), /${segment}
+        # ─── Practice Dashboard Service (main backend) ───────────────────────
+        # All /api/** requests go to the practice dashboard backend service
+#        - id: practice-dashboard-service
+#          uri: ${PRACTICE_DASHBOARD_SERVICE_URL:http://localhost:8080}
+#          predicates:
+#            - Path=/api/**
+#          filters:
+#            # Strip any internal headers from client requests for security
+#            - RemoveRequestHeader=X-Internal-Role
+#            - RemoveRequestHeader=X-Internal-Email
+#
+#        # ─── Static Frontend (Angular) ────────────────────────────────────────
+#        # All other requests go to the Angular frontend
+#        - id: frontend
+#          uri: ${FRONTEND_URL:http://localhost:4200}
+#          predicates:
+#            - Path=/**
+#          filters:
+#            - RewritePath=/(?<segment>.*), /${segment}
 
 # Azure AD config
 azure:
   tenant-id: ${AZURE_TENANT_ID}
   client-id: ${AZURE_CLIENT_ID}
+  redirect-uri: ${AZURE_REDIRECT_URI:https://practice-dashboard-dev.sandhata.com}
 
 # Role based access configuration
 # Define which roles can access which paths

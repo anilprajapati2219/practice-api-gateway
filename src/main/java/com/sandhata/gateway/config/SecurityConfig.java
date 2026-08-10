@@ -15,12 +15,38 @@ public class SecurityConfig {
         http
                 .csrf(csrf -> csrf.disable())
                 .authorizeExchange(exchanges -> exchanges
-                        // Allow everything without token for now
+                        // Public paths — no auth needed
+                        .pathMatchers(
+                                "/actuator/health",
+                                "/actuator/info",
+                                "/api/auth/callback",
+                                "/api/auth/logout",
+                                "/api/auth/me",
+                                "/api/config/azure"
+                        ).permitAll()
+                        // All other requests permitted —
+                        // actual auth is handled in JwtAuthenticationFilter via cookie
                         .anyExchange().permitAll()
+                )
+                // Keep JWT decoder configured for token validation in filter
+                .oauth2ResourceServer(oauth2 -> oauth2
+                        .jwt(jwt -> {})
                 );
 
         return http.build();
     }
+
+//    @Bean
+//    public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http) {
+//        http
+//                .csrf(csrf -> csrf.disable())
+//                .authorizeExchange(exchanges -> exchanges
+//                        // Allow everything without token for now
+//                        .anyExchange().permitAll()
+//                );
+//
+//        return http.build();
+//    }
 }
 //package com.sandhata.gateway.config;
 //
