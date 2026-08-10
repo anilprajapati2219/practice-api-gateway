@@ -60,65 +60,66 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
 
         log.debug("Gateway filter — {} {}", method, path);
 
+        return chain.filter(exchange);
         // Allow public paths without authentication
-        if (isPublicPath(path)) {
-            return chain.filter(exchange);
-        }
+//        if (isPublicPath(path)) {
+//            return chain.filter(exchange);
+//        }
 
         // Extract JWT and process
-        return ReactiveSecurityContextHolder.getContext()
-                .flatMap(securityContext -> {
-                    var authentication = securityContext.getAuthentication();
-                    if (authentication == null || !authentication.isAuthenticated()) {
-                        log.warn("Unauthenticated request to: {}", path);
-                        exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
-                        return exchange.getResponse().setComplete();
-                    }
-
-                    // Get JWT principal
-                    Jwt jwt = (Jwt) authentication.getPrincipal();
-                    String email = extractEmail(jwt);
-                    String name = jwt.getClaimAsString("name");
-
-                    if (email == null) {
-                        log.warn("No email found in JWT for path: {}", path);
-                        exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
-                        return exchange.getResponse().setComplete();
-                    }
-
-                    // Fetch user role and check access
-                    return roleService.getUserContext(email, name)
-                            .flatMap(userContext -> {
-                                // Check role-based access
-                                if (!hasAccess(userContext.getRole(), path, method)) {
-                                    log.warn("Access denied for user: {} role: {} path: {}",
-                                            email, userContext.getRole(), path);
-                                    exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
-                                    return exchange.getResponse().setComplete();
-                                }
-
-                                // Add user context headers to forward to backend
-                                ServerWebExchange mutatedExchange = exchange.mutate()
-                                        .request(exchange.getRequest().mutate()
-                                                .header("X-User-Email", email)
-                                                .header("X-User-Name", name != null ? name : "")
-                                                .header("X-User-Role", userContext.getRole().name())
-                                                .header("X-User-Practice", userContext.getPractice() != null
-                                                        ? userContext.getPractice() : "")
-                                                .build())
-                                        .build();
-
-                                log.debug("Forwarding request for user: {} role: {} to: {}",
-                                        email, userContext.getRole(), path);
-                                return chain.filter(mutatedExchange);
-                            });
-                })
-                .switchIfEmpty(Mono.defer(() -> {
-                    // No security context — unauthenticated
-                    log.warn("No security context for path: {}", path);
-                    exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
-                    return exchange.getResponse().setComplete();
-                }));
+//        return ReactiveSecurityContextHolder.getContext()
+//                .flatMap(securityContext -> {
+//                    var authentication = securityContext.getAuthentication();
+//                    if (authentication == null || !authentication.isAuthenticated()) {
+//                        log.warn("Unauthenticated request to: {}", path);
+//                        exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
+//                        return exchange.getResponse().setComplete();
+//                    }
+//
+//                    // Get JWT principal
+//                    Jwt jwt = (Jwt) authentication.getPrincipal();
+//                    String email = extractEmail(jwt);
+//                    String name = jwt.getClaimAsString("name");
+//
+//                    if (email == null) {
+//                        log.warn("No email found in JWT for path: {}", path);
+//                        exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
+//                        return exchange.getResponse().setComplete();
+//                    }
+//
+//                    // Fetch user role and check access
+//                    return roleService.getUserContext(email, name)
+//                            .flatMap(userContext -> {
+//                                // Check role-based access
+//                                if (!hasAccess(userContext.getRole(), path, method)) {
+//                                    log.warn("Access denied for user: {} role: {} path: {}",
+//                                            email, userContext.getRole(), path);
+//                                    exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
+//                                    return exchange.getResponse().setComplete();
+//                                }
+//
+//                                // Add user context headers to forward to backend
+//                                ServerWebExchange mutatedExchange = exchange.mutate()
+//                                        .request(exchange.getRequest().mutate()
+//                                                .header("X-User-Email", email)
+//                                                .header("X-User-Name", name != null ? name : "")
+//                                                .header("X-User-Role", userContext.getRole().name())
+//                                                .header("X-User-Practice", userContext.getPractice() != null
+//                                                        ? userContext.getPractice() : "")
+//                                                .build())
+//                                        .build();
+//
+//                                log.debug("Forwarding request for user: {} role: {} to: {}",
+//                                        email, userContext.getRole(), path);
+//                                return chain.filter(mutatedExchange);
+//                            });
+//                })
+//                .switchIfEmpty(Mono.defer(() -> {
+//                    // No security context — unauthenticated
+//                    log.warn("No security context for path: {}", path);
+//                    exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
+//                    return exchange.getResponse().setComplete();
+//                }));
     }
 
     /**
