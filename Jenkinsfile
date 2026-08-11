@@ -8,10 +8,6 @@ pipeline {
     environment {
         APP_NAME = 'practice-api-gateway'
         IMAGE_NAME = 'practice-dashboard-gateway'
-    }
-
-    environment {
-        APP_NAME = 'practice-dashboard-gateway'
         AZURE_TENANT_ID = credentials('AZURE_TENANT_ID')
         AZURE_CLIENT_ID = credentials('AZURE_CLIENT_ID')
         AZURE_REDIRECT_URI = credentials('AZURE_REDIRECT_URI')
