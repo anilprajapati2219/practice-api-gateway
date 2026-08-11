@@ -37,6 +37,15 @@ spec:
                   name: practice-dashboard-gateway-secret
                   key: AZURE_CLIENT_ID
 
+            - name: AZURE_REDIRECT_URI
+              valueFrom:
+                secretKeyRef:
+                  name: practice-dashboard-gateway-secret
+                  key: AZURE_REDIRECT_URI
+
+            - name: PRACTICE_DASHBOARD_SERVICE_URL
+              value: "http://integration-dashboard-service.integration-dashboard-dev.svc.cluster.local:80"
+
             - name: PRACTICE_DASHBOARD_SERVICE_URL
               value: "http://integration-dashboard-service.integration-dashboard-dev.svc.cluster.local:80"
 
