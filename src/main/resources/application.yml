@@ -35,7 +35,6 @@ spring:
             allowCredentials: true
 
       routes:
-        # Auth routes handled by gateway itself — no forwarding needed
         - id: auth-routes
           uri: http://localhost:8098
           predicates:
@@ -45,6 +44,11 @@ spring:
           uri: ${PRACTICE_DASHBOARD_SERVICE_URL:http://localhost:8080}
           predicates:
             - Path=/api/**
+
+        - id: frontend
+          uri: ${FRONTEND_URL:http://integration-dashboard-service.integration-dashboard-dev.svc.cluster.local:80}
+          predicates:
+            - Path=/**
 
         # ─── Practice Dashboard Service (main backend) ───────────────────────
         # All /api/** requests go to the practice dashboard backend service
@@ -68,8 +72,8 @@ spring:
 
 # Azure AD config
 azure:
-  tenant-id: ${AZURE_TENANT_ID}
-  client-id: ${AZURE_CLIENT_ID}
+  tenant-id: 5e45e2ef-d6aa-4ad1-aaca-a7187394a753
+  client-id: ce00c467-f4c4-469f-a695-620d11073fde
   redirect-uri: ${AZURE_REDIRECT_URI:https://practice-dashboard-dev.sandhata.com}
 
 # Role based access configuration
