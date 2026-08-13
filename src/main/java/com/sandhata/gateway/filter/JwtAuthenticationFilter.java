@@ -70,6 +70,8 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
             return exchange.getResponse().setComplete();
         }
 
+        log.info("AUTH: access_token cookie FOUND for {}", path);
+
         String tokenValue = tokenCookie.getValue();
 
         // Validate JWT token
@@ -77,6 +79,15 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
                 .flatMap(jwt -> {
                     String email = extractEmail(jwt);
                     String name = jwt.getClaimAsString("name");
+
+                    log.info("JWT VALIDATED. subject={}, email={}, preferred_username={}, emailClaim={}, name={}, aud={}, iss={}",
+                            jwt.getSubject(),
+                            email,
+                            jwt.getClaimAsString("preferred_username"),
+                            jwt.getClaimAsString("email"),
+                            name,
+                            jwt.getAudience(),
+                            jwt.getIssuer());
 
                     if (email == null) {
                         log.warn("No email in JWT for path: {}", path);

@@ -21,7 +21,7 @@ spring:
         corsConfigurations:
           '[/**]':
             allowedOrigins:
-              - "https://practice-dashboard-dev.sandhata.com"
+              - "https://practice-dashboard-dev.sandhata.com/"
               - "https://intranet.sandhata.com"
               - "http://localhost:4200"
               - "http://localhost:8080"
@@ -74,7 +74,7 @@ spring:
 azure:
   tenant-id: 5e45e2ef-d6aa-4ad1-aaca-a7187394a753
   client-id: ce00c467-f4c4-469f-a695-620d11073fde
-  redirect-uri: ${AZURE_REDIRECT_URI:https://practice-dashboard-dev.sandhata.com}
+  redirect-uri: ${AZURE_REDIRECT_URI:https://practice-dashboard-dev.sandhata.com/}
 
 # Role based access configuration
 # Define which roles can access which paths

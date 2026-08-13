@@ -118,12 +118,26 @@ public class AuthCallbackController {
 
                     return ResponseEntity.ok(Map.of("status", "success"));
                 })
+                .onErrorResume(org.springframework.web.reactive.function.client.WebClientResponseException.class, error -> {
+            log.error("Token exchange failed. Status: {}, Body: {}",
+                    error.getStatusCode(), error.getResponseBodyAsString());
+            return Mono.just(ResponseEntity
+                    .status(HttpStatus.UNAUTHORIZED)
+                    .<Map<String, String>>body(Map.of("error", "Token exchange failed",
+                            "detail", error.getResponseBodyAsString())));
+        })
                 .onErrorResume(error -> {
-                    log.error("Token exchange failed: {}", error.getMessage());
+                    log.error("Token exchange failed (non-HTTP error): {}", error.toString());
                     return Mono.just(ResponseEntity
                             .status(HttpStatus.UNAUTHORIZED)
                             .<Map<String, String>>body(Map.of("error", "Token exchange failed")));
                 });
+//                .onErrorResume(error -> {
+//                    log.error("Token exchange failed: {}", error.getMessage());
+//                    return Mono.just(ResponseEntity
+//                            .status(HttpStatus.UNAUTHORIZED)
+//                            .<Map<String, String>>body(Map.of("error", "Token exchange failed")));
+//                });
     }
 
     /**
