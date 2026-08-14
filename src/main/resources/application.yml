@@ -35,10 +35,6 @@ spring:
             allowCredentials: true
 
       routes:
-        - id: auth-routes
-          uri: http://localhost:8098
-          predicates:
-            - Path=/api/auth/**
 
         - id: practice-dashboard-service
           uri: ${PRACTICE_DASHBOARD_SERVICE_URL:http://localhost:8080}

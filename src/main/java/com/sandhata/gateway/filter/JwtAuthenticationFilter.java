@@ -49,53 +49,34 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
 
         log.debug("Gateway filter — {} {}", method, path);
 
-        // Allow public paths
-        if (isPublicPath(path)) {
+        // Allow public paths and non-API paths
+        if (isPublicPath(path) || !path.startsWith("/api/")) {
             return chain.filter(exchange);
         }
 
-        // Allow non-API paths (frontend pages) without token
-        if (!path.startsWith("/api/")) {
-            return chain.filter(exchange);
-        }
+        // Read token from Authorization header
+        String authHeader = exchange.getRequest()
+                .getHeaders()
+                .getFirst("Authorization");
 
-        // Read token from HTTP-only cookie
-        HttpCookie tokenCookie = exchange.getRequest()
-                .getCookies()
-                .getFirst("access_token");
-
-        if (tokenCookie == null || tokenCookie.getValue().isEmpty()) {
-            log.warn("No access_token cookie for path: {}", path);
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            log.warn("No Bearer token for path: {}", path);
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
             return exchange.getResponse().setComplete();
         }
 
-        log.info("AUTH: access_token cookie FOUND for {}", path);
+        String tokenValue = authHeader.substring(7);
 
-        String tokenValue = tokenCookie.getValue();
-
-        // Validate JWT token
         return jwtDecoder.decode(tokenValue)
                 .flatMap(jwt -> {
                     String email = extractEmail(jwt);
                     String name = jwt.getClaimAsString("name");
 
-                    log.info("JWT VALIDATED. subject={}, email={}, preferred_username={}, emailClaim={}, name={}, aud={}, iss={}",
-                            jwt.getSubject(),
-                            email,
-                            jwt.getClaimAsString("preferred_username"),
-                            jwt.getClaimAsString("email"),
-                            name,
-                            jwt.getAudience(),
-                            jwt.getIssuer());
-
                     if (email == null) {
-                        log.warn("No email in JWT for path: {}", path);
                         exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
                         return exchange.getResponse().setComplete();
                     }
 
-                    // Fetch role and check access
                     return roleService.getUserContext(email, name)
                             .flatMap(userContext -> {
                                 if (!hasAccess(userContext.getRole(), path, method)) {
@@ -105,7 +86,6 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
                                     return exchange.getResponse().setComplete();
                                 }
 
-                                // Forward with user context headers
                                 ServerWebExchange mutatedExchange = exchange.mutate()
                                         .request(exchange.getRequest().mutate()
                                                 .header("X-User-Email", email)
@@ -117,8 +97,6 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
                                                 .build())
                                         .build();
 
-                                log.debug("Forwarding request user: {} role: {}",
-                                        email, userContext.getRole());
                                 return chain.filter(mutatedExchange);
                             });
                 })
@@ -128,6 +106,93 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
                     return exchange.getResponse().setComplete();
                 });
     }
+
+//    @Override
+//    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+//        String path = exchange.getRequest().getPath().toString();
+//        String method = exchange.getRequest().getMethod().name();
+//
+//        log.debug("Gateway filter — {} {}", method, path);
+//
+//        // Allow public paths
+//        if (isPublicPath(path)) {
+//            return chain.filter(exchange);
+//        }
+//
+//        // Allow non-API paths (frontend pages) without token
+//        if (!path.startsWith("/api/")) {
+//            return chain.filter(exchange);
+//        }
+//
+//        // Read token from HTTP-only cookie
+//        HttpCookie tokenCookie = exchange.getRequest()
+//                .getCookies()
+//                .getFirst("access_token");
+//
+//        if (tokenCookie == null || tokenCookie.getValue().isEmpty()) {
+//            log.warn("No access_token cookie for path: {}", path);
+//            exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
+//            return exchange.getResponse().setComplete();
+//        }
+//
+//        log.info("AUTH: access_token cookie FOUND for {}", path);
+//
+//        String tokenValue = tokenCookie.getValue();
+//
+//        // Validate JWT token
+//        return jwtDecoder.decode(tokenValue)
+//                .flatMap(jwt -> {
+//                    String email = extractEmail(jwt);
+//                    String name = jwt.getClaimAsString("name");
+//
+//                    log.info("JWT VALIDATED. subject={}, email={}, preferred_username={}, emailClaim={}, name={}, aud={}, iss={}",
+//                            jwt.getSubject(),
+//                            email,
+//                            jwt.getClaimAsString("preferred_username"),
+//                            jwt.getClaimAsString("email"),
+//                            name,
+//                            jwt.getAudience(),
+//                            jwt.getIssuer());
+//
+//                    if (email == null) {
+//                        log.warn("No email in JWT for path: {}", path);
+//                        exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
+//                        return exchange.getResponse().setComplete();
+//                    }
+//
+//                    // Fetch role and check access
+//                    return roleService.getUserContext(email, name)
+//                            .flatMap(userContext -> {
+//                                if (!hasAccess(userContext.getRole(), path, method)) {
+//                                    log.warn("Access denied for user: {} role: {} path: {}",
+//                                            email, userContext.getRole(), path);
+//                                    exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
+//                                    return exchange.getResponse().setComplete();
+//                                }
+//
+//                                // Forward with user context headers
+//                                ServerWebExchange mutatedExchange = exchange.mutate()
+//                                        .request(exchange.getRequest().mutate()
+//                                                .header("X-User-Email", email)
+//                                                .header("X-User-Name", name != null ? name : "")
+//                                                .header("X-User-Role", userContext.getRole().name())
+//                                                .header("X-User-Practice",
+//                                                        userContext.getPractice() != null
+//                                                                ? userContext.getPractice() : "")
+//                                                .build())
+//                                        .build();
+//
+//                                log.debug("Forwarding request user: {} role: {}",
+//                                        email, userContext.getRole());
+//                                return chain.filter(mutatedExchange);
+//                            });
+//                })
+//                .onErrorResume(error -> {
+//                    log.error("JWT validation failed: {}", error.getMessage());
+//                    exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
+//                    return exchange.getResponse().setComplete();
+//                });
+//    }
 
     private boolean hasAccess(UserRole role, String path, String method) {
         if (role == UserRole.GUEST) {
