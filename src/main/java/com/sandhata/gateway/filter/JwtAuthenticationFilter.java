@@ -1,56 +1,55 @@
 package com.sandhata.gateway.filter;
 
+import com.sandhata.gateway.config.RoleAccessProperties;
 import com.sandhata.gateway.model.UserContext;
 import com.sandhata.gateway.model.UserRole;
-import com.sandhata.gateway.service.RoleService;
+import com.sandhata.gateway.service.SessionJwtService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
-import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpCookie;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.core.context.ReactiveSecurityContextHolder;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
- * Global filter that runs on every request.
+ * Global filter that runs on every request through the gateway.
  *
  * Flow:
- * 1. Extract JWT from Authorization header
- * 2. Validate JWT (done by Spring Security OAuth2 Resource Server)
- * 3. Extract email and name from JWT claims
- * 4. Fetch user role from backend (via RoleService)
- * 5. Check if user has permission to access the requested path
- * 6. Forward request to backend with user context headers
+ *  1. Public paths (health check, the auth endpoints themselves, ...) pass
+ *     straight through.
+ *  2. Every other request must carry a valid {@code pd_session} cookie —
+ *     the session JWT minted by {@code AuthCallbackController} at login.
+ *     This is NOT an Azure AD token; the gateway validates its own token,
+ *     signed with a secret only it knows ({@link SessionJwtService}).
+ *  3. The token's role/practice claims (set at login time from the
+ *     Integrators table) are checked against the path's minimum required
+ *     role ({@link RoleAccessProperties}).
+ *  4. On success, the request is forwarded to the backend with trusted
+ *     X-User-* headers — any such headers the client sent itself are
+ *     stripped first so they can't be spoofed.
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
 
-    private final RoleService roleService;
+    private final SessionJwtService sessionJwtService;
+    private final RoleAccessProperties roleAccessProperties;
 
     // Paths that do NOT require authentication
     private static final List<String> PUBLIC_PATHS = List.of(
             "/actuator/health",
             "/actuator/info",
-            "/api/config/azure"
-    );
-
-    // Paths that only ADMIN can access
-    private static final List<String> ADMIN_ONLY_PATHS = List.of(
-            "/api/announcements/add"
-    );
-
-    // Paths that ADMIN and MANAGER can access (write operations)
-    private static final List<String> MANAGER_PATHS = List.of(
-            "/api/availability-panel"
+            "/api/config/azure",
+            "/api/auth/callback",
+            "/api/auth/logout"
     );
 
     @Override
@@ -60,120 +59,57 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
 
         log.debug("Gateway filter — {} {}", method, path);
 
-        return chain.filter(exchange);
-        // Allow public paths without authentication
-//        if (isPublicPath(path)) {
-//            return chain.filter(exchange);
-//        }
+        if (isPublicPath(path)) {
+            return chain.filter(exchange);
+        }
 
-        // Extract JWT and process
-//        return ReactiveSecurityContextHolder.getContext()
-//                .flatMap(securityContext -> {
-//                    var authentication = securityContext.getAuthentication();
-//                    if (authentication == null || !authentication.isAuthenticated()) {
-//                        log.warn("Unauthenticated request to: {}", path);
-//                        exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
-//                        return exchange.getResponse().setComplete();
-//                    }
-//
-//                    // Get JWT principal
-//                    Jwt jwt = (Jwt) authentication.getPrincipal();
-//                    String email = extractEmail(jwt);
-//                    String name = jwt.getClaimAsString("name");
-//
-//                    if (email == null) {
-//                        log.warn("No email found in JWT for path: {}", path);
-//                        exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
-//                        return exchange.getResponse().setComplete();
-//                    }
-//
-//                    // Fetch user role and check access
-//                    return roleService.getUserContext(email, name)
-//                            .flatMap(userContext -> {
-//                                // Check role-based access
-//                                if (!hasAccess(userContext.getRole(), path, method)) {
-//                                    log.warn("Access denied for user: {} role: {} path: {}",
-//                                            email, userContext.getRole(), path);
-//                                    exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
-//                                    return exchange.getResponse().setComplete();
-//                                }
-//
-//                                // Add user context headers to forward to backend
-//                                ServerWebExchange mutatedExchange = exchange.mutate()
-//                                        .request(exchange.getRequest().mutate()
-//                                                .header("X-User-Email", email)
-//                                                .header("X-User-Name", name != null ? name : "")
-//                                                .header("X-User-Role", userContext.getRole().name())
-//                                                .header("X-User-Practice", userContext.getPractice() != null
-//                                                        ? userContext.getPractice() : "")
-//                                                .build())
-//                                        .build();
-//
-//                                log.debug("Forwarding request for user: {} role: {} to: {}",
-//                                        email, userContext.getRole(), path);
-//                                return chain.filter(mutatedExchange);
-//                            });
-//                })
-//                .switchIfEmpty(Mono.defer(() -> {
-//                    // No security context — unauthenticated
-//                    log.warn("No security context for path: {}", path);
-//                    exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
-//                    return exchange.getResponse().setComplete();
-//                }));
+        HttpCookie sessionCookie = exchange.getRequest().getCookies().getFirst(SessionJwtService.COOKIE_NAME);
+        if (sessionCookie == null) {
+            return reject(exchange, HttpStatus.UNAUTHORIZED, "no session cookie for path: " + path);
+        }
+
+        Optional<UserContext> maybeUser = sessionJwtService.parseToken(sessionCookie.getValue());
+        if (maybeUser.isEmpty()) {
+            return reject(exchange, HttpStatus.UNAUTHORIZED, "invalid/expired session token for path: " + path);
+        }
+
+        UserContext user = maybeUser.get();
+        UserRole requiredRole = roleAccessProperties.minRoleFor(path);
+
+        if (!user.getRole().atLeast(requiredRole)) {
+            return reject(exchange, HttpStatus.FORBIDDEN,
+                    "user " + user.getEmail() + " (role " + user.getRole() + ") lacks " + requiredRole + " for path: " + path);
+        }
+
+        ServerWebExchange mutatedExchange = exchange.mutate()
+                .request(exchange.getRequest().mutate()
+                        .headers(httpHeaders -> {
+                            // Strip any client-supplied values so they can't spoof identity/role
+                            httpHeaders.remove("X-User-Email");
+                            httpHeaders.remove("X-User-Name");
+                            httpHeaders.remove("X-User-Role");
+                            httpHeaders.remove("X-User-Practice");
+
+                            httpHeaders.set("X-User-Email", user.getEmail());
+                            httpHeaders.set("X-User-Name", user.getName() != null ? user.getName() : "");
+                            httpHeaders.set("X-User-Role", user.getRole().name());
+                            httpHeaders.set("X-User-Practice", user.getPractice() != null ? user.getPractice() : "");
+                        })
+                        .build())
+                .build();
+
+        log.debug("Forwarding request for user: {} role: {} to: {}", user.getEmail(), user.getRole(), path);
+        return chain.filter(mutatedExchange);
     }
 
-    /**
-     * Check if user role has access to the requested path and method.
-     */
-    private boolean hasAccess(UserRole role, String path, String method) {
-        // GUEST role — read only access to basic paths
-        if (role == UserRole.GUEST) {
-            return method.equals("GET") && !isAdminOnlyPath(path) && !isManagerPath(path);
-        }
-
-        // VIEWER role — read only access to all API paths
-        if (role == UserRole.VIEWER) {
-            return method.equals("GET");
-        }
-
-        // MANAGER role — read and write but not admin paths
-        if (role == UserRole.MANAGER) {
-            return !isAdminOnlyPath(path);
-        }
-
-        // ADMIN role — full access to everything
-        if (role == UserRole.ADMIN) {
-            return true;
-        }
-
-        return false;
+    private Mono<Void> reject(ServerWebExchange exchange, HttpStatus status, String reason) {
+        log.warn("{} — {}", status, reason);
+        exchange.getResponse().setStatusCode(status);
+        return exchange.getResponse().setComplete();
     }
 
     private boolean isPublicPath(String path) {
         return PUBLIC_PATHS.stream().anyMatch(path::startsWith);
-    }
-
-    private boolean isAdminOnlyPath(String path) {
-        return ADMIN_ONLY_PATHS.stream().anyMatch(path::startsWith);
-    }
-
-    private boolean isManagerPath(String path) {
-        return MANAGER_PATHS.stream().anyMatch(path::startsWith);
-    }
-
-    /**
-     * Extract email from JWT claims.
-     * Azure AD uses 'preferred_username' or 'email' claim.
-     */
-    private String extractEmail(Jwt jwt) {
-        String email = jwt.getClaimAsString("preferred_username");
-        if (email == null) {
-            email = jwt.getClaimAsString("email");
-        }
-        if (email == null) {
-            email = jwt.getClaimAsString("upn");
-        }
-        return email;
     }
 
     @Override
