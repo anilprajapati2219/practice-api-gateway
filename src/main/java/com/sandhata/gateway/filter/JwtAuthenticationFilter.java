@@ -36,9 +36,13 @@ import java.util.Optional;
  *     {@code AuthCallbackController} at login. This is NOT an Azure AD
  *     token; the gateway validates its own token, signed with a secret only
  *     it knows ({@link SessionJwtService}).
- *  3. The token's role/practice claims (set at login time from the
- *     Integrators table) are checked against the path's minimum required
- *     role ({@link RoleAccessProperties}).
+ *  3. For state-changing requests only (POST/PUT/PATCH/DELETE), the
+ *     token's role claim (set at login time from the Integrators table) is
+ *     checked against the path's minimum required role
+ *     ({@link RoleAccessProperties}). Plain GET/HEAD reads are open to any
+ *     authenticated role — this is a viewing dashboard, so everyone who's
+ *     logged in can see the charts; only adding/editing data is
+ *     role-gated.
  *  4. On success, the request is forwarded to the backend with trusted
  *     X-User-* headers — any such headers the client sent itself are
  *     stripped first so they can't be spoofed.
@@ -83,11 +87,22 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
         }
 
         UserContext user = maybeUser.get();
-        UserRole requiredRole = roleAccessProperties.minRoleFor(path);
 
-        if (!user.getRole().atLeast(requiredRole)) {
-            return reject(exchange, HttpStatus.FORBIDDEN,
-                    "user " + user.getEmail() + " (role " + user.getRole() + ") lacks " + requiredRole + " for path: " + path);
+        // Role rules only gate state-changing requests (POST/PUT/PATCH/
+        // DELETE). Any authenticated role can GET/read every dashboard
+        // endpoint — this is a viewing dashboard, not a per-section ACL —
+        // which row-level data to show for a given role/practice is a
+        // backend concern (X-User-Role/X-User-Practice headers below), not
+        // something the gateway should do by blocking whole read endpoints.
+        // (Earlier this checked GETs too, which is what caused a plain
+        // logged-in USER to get 403s on ordinary chart data.)
+        if (!"GET".equalsIgnoreCase(method) && !"HEAD".equalsIgnoreCase(method)) {
+            UserRole requiredRole = roleAccessProperties.minRoleFor(path);
+            if (!user.getRole().atLeast(requiredRole)) {
+                return reject(exchange, HttpStatus.FORBIDDEN,
+                        "user " + user.getEmail() + " (role " + user.getRole() + ") lacks " + requiredRole
+                                + " for " + method + " " + path);
+            }
         }
 
         ServerWebExchange mutatedExchange = exchange.mutate()
