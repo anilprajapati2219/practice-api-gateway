@@ -37,6 +37,37 @@ spec:
                   name: practice-dashboard-gateway-secret
                   key: AZURE_CLIENT_ID
 
+            # Was never wired up before — this is why token exchange failed
+            # with AADSTS7000218 (missing client_secret): the gateway was
+            # always sending an empty string. `optional: true` so the pod
+            # still starts (and just fails auth cleanly) if the key is ever
+            # briefly absent, instead of crash-looping.
+            - name: AZURE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: practice-dashboard-gateway-secret
+                  key: AZURE_CLIENT_SECRET
+                  optional: true
+
+            # Must exactly match (including trailing slash) both the
+            # redirect URI registered in Azure's "Web" platform AND what
+            # Angular's app-config.json AZURE_AD.REDIRECT_URI sends —
+            # OAuth requires the same redirect_uri string on the /authorize
+            # and /token calls.
+            - name: AZURE_REDIRECT_URI
+              valueFrom:
+                secretKeyRef:
+                  name: practice-dashboard-gateway-secret
+                  key: AZURE_REDIRECT_URI
+                  optional: true
+
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: practice-dashboard-gateway-secret
+                  key: JWT_SECRET
+                  optional: true
+
             - name: PRACTICE_DASHBOARD_SERVICE_URL
               value: "http://integration-dashboard-service.integration-dashboard-dev.svc.cluster.local:80"
 
