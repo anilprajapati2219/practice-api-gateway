@@ -21,13 +21,21 @@ import java.util.Optional;
 /**
  * Global filter that runs on every request through the gateway.
  *
- * Flow:
- *  1. Public paths (health check, the auth endpoints themselves, ...) pass
- *     straight through.
- *  2. Every other request must carry a valid {@code pd_session} cookie —
- *     the session JWT minted by {@code AuthCallbackController} at login.
- *     This is NOT an Azure AD token; the gateway validates its own token,
- *     signed with a secret only it knows ({@link SessionJwtService}).
+ * IMPORTANT: this only gates the backend API route ({@code /api/**}) — the
+ * gateway also serves the Angular app itself on every other path (see the
+ * "frontend" route in application.yml), and that route must stay reachable
+ * with no cookie at all, otherwise nobody can ever load the login page in
+ * the first place (a brand-new browser has no session cookie yet — if the
+ * static files themselves required one, that's a permanent lockout).
+ *
+ * Flow, for {@code /api/**} paths only:
+ *  1. A handful of API paths are public (the auth endpoints themselves,
+ *     health check) and pass straight through.
+ *  2. Every other {@code /api/**} request must carry a valid
+ *     {@code pd_session} cookie — the session JWT minted by
+ *     {@code AuthCallbackController} at login. This is NOT an Azure AD
+ *     token; the gateway validates its own token, signed with a secret only
+ *     it knows ({@link SessionJwtService}).
  *  3. The token's role/practice claims (set at login time from the
  *     Integrators table) are checked against the path's minimum required
  *     role ({@link RoleAccessProperties}).
@@ -43,10 +51,8 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
     private final SessionJwtService sessionJwtService;
     private final RoleAccessProperties roleAccessProperties;
 
-    // Paths that do NOT require authentication
-    private static final List<String> PUBLIC_PATHS = List.of(
-            "/actuator/health",
-            "/actuator/info",
+    // API paths that do NOT require authentication
+    private static final List<String> PUBLIC_API_PATHS = List.of(
             "/api/config/azure",
             "/api/auth/callback",
             "/api/auth/logout"
@@ -59,7 +65,10 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
 
         log.debug("Gateway filter — {} {}", method, path);
 
-        if (isPublicPath(path)) {
+        // Only the backend API route is gated. Everything else (the
+        // Angular app's own files, actuator, ...) is routed elsewhere and
+        // must stay reachable without a session.
+        if (!path.startsWith("/api/") || isPublicApiPath(path)) {
             return chain.filter(exchange);
         }
 
@@ -108,8 +117,8 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
         return exchange.getResponse().setComplete();
     }
 
-    private boolean isPublicPath(String path) {
-        return PUBLIC_PATHS.stream().anyMatch(path::startsWith);
+    private boolean isPublicApiPath(String path) {
+        return PUBLIC_API_PATHS.stream().anyMatch(path::startsWith);
     }
 
     @Override
