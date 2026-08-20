@@ -137,8 +137,62 @@ public class AuthCallbackController {
                 })
                 .onErrorResume(e -> {
                     log.error("Auth callback failed: {}", e.getMessage());
-                    return Mono.just(unauthorized("token_exchange_failed"));
+                    return Mono.just(buildFailureResponse(e));
                 });
+    }
+
+    /**
+     * Surfaces the real failure reason in the 401 body instead of a flat
+     * "token_exchange_failed" — this is what shows up in the browser's
+     * Network tab, which is often the only place anyone actually looks when
+     * something's wrong. Safe to expose: Azure's OAuth error/error_description
+     * fields never contain the client secret or any token, only a reason
+     * code like "unauthorized_client" / "invalid_grant" plus an AADSTS
+     * message. For a non-Azure failure (DNS, connection refused, timeout —
+     * i.e. the gateway pod couldn't even reach login.microsoftonline.com)
+     * we surface the exception type/message instead, which is likewise safe.
+     */
+    private ResponseEntity<Map<String, Object>> buildFailureResponse(Throwable e) {
+        if (e instanceof AzureTokenExchangeException aze) {
+            Map<String, Object> details = new java.util.LinkedHashMap<>();
+            details.put("error", "azure_token_exchange_failed");
+            details.put("azureHttpStatus", aze.azureStatus);
+            try {
+                Map<?, ?> azureBody = objectMapper.readValue(aze.azureBody, Map.class);
+                details.put("azureError", azureBody.get("error"));
+                details.put("azureErrorDescription", azureBody.get("error_description"));
+            } catch (Exception parseFailure) {
+                // Azure didn't return JSON — surface the raw body, truncated.
+                String raw = aze.azureBody;
+                details.put("azureRawBody", raw.length() > 500 ? raw.substring(0, 500) + "..." : raw);
+            }
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(details);
+        }
+
+        // Not an HTTP error from Azure at all — the gateway pod likely
+        // couldn't reach login.microsoftonline.com (network/DNS/proxy/egress
+        // issue), or some other unexpected failure.
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+                "error", "token_exchange_failed",
+                "exceptionType", e.getClass().getName(),
+                "exceptionMessage", String.valueOf(e.getMessage())
+        ));
+    }
+
+    /**
+     * Carries Azure's actual HTTP status + response body up from
+     * {@link #exchangeCodeForTokens} so the controller can put it in the
+     * response instead of a flat generic error.
+     */
+    private static final class AzureTokenExchangeException extends RuntimeException {
+        private final int azureStatus;
+        private final String azureBody;
+
+        AzureTokenExchangeException(int azureStatus, String azureBody) {
+            super("azure_token_exchange_failed [" + azureStatus + "]");
+            this.azureStatus = azureStatus;
+            this.azureBody = azureBody;
+        }
     }
 
     @PostMapping("/logout")
@@ -181,7 +235,7 @@ public class AuthCallbackController {
                 .onStatus(HttpStatusCode::isError, clientResponse ->
                         clientResponse.bodyToMono(String.class).flatMap(body -> {
                             log.warn("Azure token exchange failed [{}]: {}", clientResponse.statusCode(), body);
-                            return Mono.error(new IllegalStateException("azure_token_exchange_failed"));
+                            return Mono.error(new AzureTokenExchangeException(clientResponse.statusCode().value(), body));
                         }))
                 .bodyToMono(Map.class)
                 .map(m -> (Map<String, Object>) m);
