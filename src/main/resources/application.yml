@@ -5,14 +5,9 @@ spring:
   application:
     name: practice-dashboard-gateway
 
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          # Azure AD JWT validation endpoint
-          # Replace TENANT_ID with your actual tenant ID
-          jwk-set-uri: https://login.microsoftonline.com/5e45e2ef-d6aa-4ad1-aaca-a7187394a753/discovery/v2.0/keys
-          issuer-uri: https://login.microsoftonline.com/5e45e2ef-d6aa-4ad1-aaca-a7187394a753/v2.0
+  # We no longer use Spring Security's OAuth2 Resource Server module here —
+  # the gateway never validates Azure AD tokens directly. See SecurityConfig
+  # and JwtAuthenticationFilter for the BFF pattern this project now uses.
 
   cloud:
     gateway:
@@ -37,13 +32,22 @@ spring:
       routes:
 
         # ─── Practice Dashboard Service (main backend) ───────────────────────
-        # All /api/** requests go to the practice dashboard backend service
+        # All /api/** requests go to the practice dashboard backend service,
+        # EXCEPT /api/auth/callback and /api/auth/logout — those are handled
+        # locally by AuthCallbackController (local @RestController mappings
+        # take precedence over gateway route predicates for the same path).
         - id: practice-dashboard-service
-          uri: ${PRACTICE_DASHBOARD_SERVICE_URL:http://localhost:8080}
+          uri: ${PRACTICE_DASHBOARD_SERVICE_URL:http://localhost:8081}
           predicates:
             - Path=/api/**
           filters:
-            # Strip any internal headers from client requests for security
+            # Strip any internal headers from client requests for security.
+            # NOTE: do NOT add X-User-* here — JwtAuthenticationFilter (a
+            # GlobalFilter, runs before route filters) already strips any
+            # client-supplied X-User-* headers and replaces them with
+            # trusted values from the validated session JWT. A route-level
+            # RemoveRequestHeader for X-User-* would strip those trusted
+            # values too, since route filters run AFTER global filters.
             - RemoveRequestHeader=X-Internal-Role
             - RemoveRequestHeader=X-Internal-Email
 
@@ -56,25 +60,63 @@ spring:
           filters:
             - RewritePath=/(?<segment>.*), /${segment}
 
-# Azure AD config
+# Azure AD config — app registration "Practice Gateway", type: Web
+# (changed from SPA so the gateway can be a confidential client and use a
+# client secret to exchange the auth code server-side).
 azure:
-  tenant-id: ${AZURE_TENANT_ID}
-  client-id: ${AZURE_CLIENT_ID}
+  tenant-id: ${AZURE_TENANT_ID:5e45e2ef-d6aa-4ad1-aaca-a7187394a753}
+  client-id: ${AZURE_CLIENT_ID:ce00c467-f4c4-469f-a695-620d11073fde}
+  # Provided by IT once the SPA -> Web migration is complete. Must come from
+  # a k8s secret in every real environment — never commit a real value here.
+  client-secret: ${AZURE_CLIENT_SECRET:}
+  redirect-uri: ${AZURE_REDIRECT_URI:https://practice-dashboard-dev.sandhata.com}
+  scopes: ${AZURE_SCOPES:openid profile email}
 
-# Role based access configuration
-# Define which roles can access which paths
+# Session JWT — the gateway's own token, set as an HttpOnly cookie after a
+# successful Azure AD login. Unrelated to Azure's tokens.
+app:
+  jwt:
+    # DEV-ONLY default below (base64 of a 32+ byte string) so local runs work
+    # out of the box. Every real environment MUST override this via the
+    # JWT_SECRET env var / k8s secret with a strong random value — anyone who
+    # has this secret can forge a session for any user/role.
+    secret: ${JWT_SECRET:Q0hBTkdFX01FX0xPQ0FMX0RFVl9KV1RfU0VDUkVUXzMyQllURVNfTUlO}
+    expiration-minutes: ${JWT_EXPIRATION_MINUTES:480}
+  cookie:
+    # Must be true (HTTPS-only cookie) everywhere except plain-http localhost.
+    secure: ${COOKIE_SECURE:true}
+
+# Role based access configuration — read by RoleAccessProperties.
+# Rules are evaluated top to bottom, first match wins, so specific paths
+# must come before broader catch-alls.
+#
+# Roles, highest to lowest privilege: ADMIN > PRACTICE_HEAD > FUNCTION_LEAD
+# > TEAM_LEAD > USER. A role can access anything requiring its rank or
+# lower (e.g. PRACTICE_HEAD can do everything FUNCTION_LEAD/TEAM_LEAD/USER
+# can).
+#
+# This only gates *which endpoints* a role may call. *Which rows* of data a
+# Function Lead/Team Lead/etc. sees within an allowed endpoint (e.g. a
+# Function Lead only seeing their own function's data) is enforced by the
+# backend using the X-User-Role / X-User-Email / X-User-Practice headers
+# forwarded on every request.
 role-access:
-  admin-paths:
-    - /api/announcements/add
-    - /api/availability-panel/
-    - /api/availability-panel/**
-  manager-paths:
-    - /api/businessMarketing/**
-    - /api/integration/**
-    - /api/training/**
-    - /api/cross-practice/**
-  viewer-paths:
-    - /api/**
+  default-min-role: USER
+  rules:
+    - path: /api/announcements/add
+      min-role: PRACTICE_HEAD
+    - path: /api/availability-panel/**
+      min-role: FUNCTION_LEAD
+    - path: /api/businessMarketing/**
+      min-role: FUNCTION_LEAD
+    - path: /api/training/**
+      min-role: FUNCTION_LEAD
+    - path: /api/cross-practice/**
+      min-role: FUNCTION_LEAD
+    - path: /api/integration/**
+      min-role: USER
+    - path: /api/**
+      min-role: USER
 
 # Logging
 logging:

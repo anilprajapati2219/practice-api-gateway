@@ -55,31 +55,32 @@ public class RoleService {
                 .retrieve()
                 .bodyToMono(Map.class)
                 .map(response -> {
-                    String role = response.getOrDefault("role", "VIEWER").toString();
+                    String role = response.getOrDefault("role", "USER").toString();
                     String practice = response.getOrDefault("practice", "").toString();
 
                     UserContext context = UserContext.builder()
                             .email(email)
                             .name(name)
                             .practice(practice)
-                            .role(parseRole(role))
+                            .role(UserRole.parse(role))
                             .build();
 
                     // Cache the result
                     roleCache.put(email, context);
-                    log.info("User {} assigned role: {} practice: {}", email, role, practice);
+                    log.info("User {} assigned role: {} practice: {}", email, context.getRole(), practice);
                     return context;
                 })
                 .onErrorResume(error -> {
-                    // If backend call fails or user not found — assign GUEST role
-                    log.warn("Could not fetch role for {} — assigning GUEST. Error: {}", email, error.getMessage());
-                    UserContext guestContext = UserContext.builder()
+                    // If backend call fails or user not found — fall back to
+                    // the lowest-privilege role rather than failing login.
+                    log.warn("Could not fetch role for {} — assigning USER. Error: {}", email, error.getMessage());
+                    UserContext fallbackContext = UserContext.builder()
                             .email(email)
                             .name(name)
                             .practice("")
-                            .role(UserRole.GUEST)
+                            .role(UserRole.USER)
                             .build();
-                    return Mono.just(guestContext);
+                    return Mono.just(fallbackContext);
                 });
     }
 
@@ -97,13 +98,5 @@ public class RoleService {
     public void clearAllCache() {
         roleCache.clear();
         log.info("Role cache cleared");
-    }
-
-    private UserRole parseRole(String role) {
-        try {
-            return UserRole.valueOf(role.toUpperCase());
-        } catch (Exception e) {
-            return UserRole.VIEWER;
-        }
     }
 }
