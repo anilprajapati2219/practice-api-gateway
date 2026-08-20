@@ -50,7 +50,12 @@ public class SessionJwtService {
 
     @PostConstruct
     void init() {
-        byte[] keyBytes = Decoders.BASE64.decode(secretBase64);
+        // Tolerate whitespace accidentally picked up when copy-pasting the
+        // secret through a credentials manager (trailing newline, stray
+        // leading/trailing space, ...) — strip it rather than hard-crash
+        // the whole app over a copy/paste artifact.
+        String cleaned = secretBase64 == null ? "" : secretBase64.replaceAll("\\s+", "");
+        byte[] keyBytes = Decoders.BASE64.decode(cleaned);
         if (keyBytes.length < 32) {
             // HS256 requires a >=256-bit key. Fail fast at startup rather than
             // producing tokens that would be trivially forgeable.
