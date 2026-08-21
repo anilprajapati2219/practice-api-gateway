@@ -13,13 +13,21 @@ pipeline {
         // as integration-dashboard-service's Jenkinsfile. These get baked
         // into the deployed k8s Secret on every "Deploy to DEV" run (see
         // that stage below), NOT committed to any file in this repo.
-        // AZURE_CLIENT_SECRET and JWT_SECRET must exist as Jenkins
-        // credentials with exactly these IDs, or this build will fail at
-        // the point it tries to resolve them.
+        // AZURE_CLIENT_SECRET, GATEWAY_AZURE_REDIRECT_URIS and JWT_SECRET
+        // must exist as Jenkins credentials with exactly these IDs, or
+        // this build will fail at the point it tries to resolve them.
         AZURE_CLIENT_ID     = credentials('AZURE_CLIENT_ID')
         AZURE_TENANT_ID     = credentials('AZURE_TENANT_ID')
         AZURE_CLIENT_SECRET = credentials('AZURE_CLIENT_SECRET')
-        AZURE_REDIRECT_URI  = credentials('AZURE_REDIRECT_URI')
+        // NOT the same credential as integration-dashboard-service's
+        // AZURE_REDIRECT_URI — that one holds a single URL, sed-substituted
+        // straight into Angular's app-config.json. This one holds a
+        // comma-separated list (one entry per frontend domain sharing this
+        // gateway) for the redirect_uri allowlist. Reusing the same
+        // credential ID between the two pipelines would corrupt whichever
+        // one read it second (a comma-joined string is not a valid single
+        // redirect_uri for Angular).
+        GATEWAY_AZURE_REDIRECT_URIS = credentials('GATEWAY_AZURE_REDIRECT_URIS')
         JWT_SECRET          = credentials('JWT_SECRET')
     }
 
@@ -99,7 +107,7 @@ pipeline {
                         --from-literal=AZURE_TENANT_ID="${AZURE_TENANT_ID}" \
                         --from-literal=AZURE_CLIENT_ID="${AZURE_CLIENT_ID}" \
                         --from-literal=AZURE_CLIENT_SECRET="${AZURE_CLIENT_SECRET}" \
-                        --from-literal=AZURE_REDIRECT_URI="${AZURE_REDIRECT_URI}" \
+                        --from-literal=AZURE_REDIRECT_URI="${GATEWAY_AZURE_REDIRECT_URIS}" \
                         --from-literal=JWT_SECRET="${JWT_SECRET}" \
                         --dry-run=client -o yaml | kubectl apply -f -
 

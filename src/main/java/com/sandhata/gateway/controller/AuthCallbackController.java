@@ -3,6 +3,7 @@ package com.sandhata.gateway.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sandhata.gateway.service.RoleService;
 import com.sandhata.gateway.service.SessionJwtService;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,7 +20,9 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.Base64;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -41,6 +44,13 @@ import java.util.Map;
  *  4. Mints our own session JWT ({@link SessionJwtService}) and sets it as
  *     an HttpOnly cookie. Azure's tokens are discarded after this point —
  *     the browser only ever holds our cookie.
+ *
+ * This one gateway serves more than one frontend domain (Angular's, the new
+ * React UI's, ...), and each domain needs its own exact redirect_uri in the
+ * token exchange. The frontend may send its own {@code redirectUri} in the
+ * request body; if omitted (older callers, e.g. Angular) we fall back to
+ * the first URI in {@code azure.redirect-uri}. Either way it's checked
+ * against that same configured allowlist before use — never trusted blindly.
  *
  * Note on routing: this controller is mapped under {@code /api/auth/**},
  * which is a sub-path of the gateway's {@code /api/**} route to the backend.
@@ -69,8 +79,9 @@ public class AuthCallbackController {
     @Value("${azure.client-secret}")
     private String clientSecret;
 
+    // Raw comma-separated config value — parsed into allowedRedirectUris below.
     @Value("${azure.redirect-uri}")
-    private String redirectUri;
+    private String redirectUriConfig;
 
     @Value("${azure.scopes:openid profile email}")
     private String scopes;
@@ -78,7 +89,29 @@ public class AuthCallbackController {
     @Value("${app.cookie.secure:true}")
     private boolean cookieSecure;
 
-    public record AuthCallbackRequest(String code) {}
+    // Every redirect URI we're willing to use in a token exchange — one per
+    // frontend domain (Angular, React, ...). Populated from azure.redirect-uri.
+    private List<String> allowedRedirectUris;
+
+    // The first configured URI, used when a caller doesn't send its own
+    // redirectUri — keeps the existing Angular app (which only ever sends
+    // {code}, never redirectUri) working unchanged.
+    private String defaultRedirectUri;
+
+    @PostConstruct
+    void initRedirectUris() {
+        allowedRedirectUris = Arrays.stream(redirectUriConfig.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
+        defaultRedirectUri = allowedRedirectUris.isEmpty() ? null : allowedRedirectUris.get(0);
+        log.info("Configured redirect URIs: {}", allowedRedirectUris);
+    }
+
+    // redirectUri is optional — only newer frontends (e.g. the React UI)
+    // send it explicitly, so more than one frontend domain can share this
+    // same gateway. When omitted, we fall back to the first configured URI.
+    public record AuthCallbackRequest(String code, String redirectUri) {}
 
     @PostMapping("/callback")
     public Mono<ResponseEntity<Map<String, Object>>> callback(
@@ -89,7 +122,16 @@ public class AuthCallbackController {
             return Mono.just(ResponseEntity.badRequest().body(Map.of("error", "missing_code")));
         }
 
-        return exchangeCodeForTokens(request.code())
+        String redirectUri = (request.redirectUri() == null || request.redirectUri().isBlank())
+                ? defaultRedirectUri
+                : request.redirectUri();
+
+        if (redirectUri == null || !allowedRedirectUris.contains(redirectUri)) {
+            log.warn("Rejected callback — redirectUri not in allowlist: {}", redirectUri);
+            return Mono.just(ResponseEntity.badRequest().body(Map.of("error", "invalid_redirect_uri")));
+        }
+
+        return exchangeCodeForTokens(request.code(), redirectUri)
                 .flatMap(tokenResponse -> {
                     Object idTokenObj = tokenResponse.get("id_token");
                     if (idTokenObj == null) {
@@ -215,7 +257,7 @@ public class AuthCallbackController {
      * AADSTS700025/AADSTS9002327 against a "SPA" registration.
      */
     @SuppressWarnings("unchecked")
-    private Mono<Map<String, Object>> exchangeCodeForTokens(String code) {
+    private Mono<Map<String, Object>> exchangeCodeForTokens(String code, String redirectUri) {
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("grant_type", "authorization_code");
         form.add("client_id", clientId);

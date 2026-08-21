@@ -49,11 +49,11 @@ spec:
                   key: AZURE_CLIENT_SECRET
                   optional: true
 
-            # Must exactly match (including trailing slash) both the
-            # redirect URI registered in Azure's "Web" platform AND what
-            # Angular's app-config.json AZURE_AD.REDIRECT_URI sends —
-            # OAuth requires the same redirect_uri string on the /authorize
-            # and /token calls.
+            # Must exactly match both the redirect URI registered in
+            # Azure's "Web" platform AND what each frontend's own config
+            # sends — OAuth requires the identical redirect_uri string on
+            # the /authorize and /token calls, trailing slash included
+            # (Angular's is registered without one).
             - name: AZURE_REDIRECT_URI
               valueFrom:
                 secretKeyRef:
