@@ -86,10 +86,12 @@ azure:
   # Comma-separated list of every redirect URI Microsoft is allowed to send
   # a code back to — one per frontend domain (Angular's, React's, ...).
   # AuthCallbackController validates whatever redirectUri each frontend
-  # sends against this list before using it in the token exchange — it
-  # must match exactly what that frontend used in its own /authorize call,
-  # trailing slash included.
-  redirect-uri: ${AZURE_REDIRECT_URI:https://practice-dashboard-dev.sandhata.com/,https://new-practice-dashboard-dev.sandhata.com/}
+  # sends against this list before using it in the token exchange — Azure
+  # does a literal string match, so it must be character-for-character
+  # identical to what's registered in Azure and what that frontend used in
+  # its own /authorize call (trailing slash or not — Angular's is
+  # registered WITHOUT one, confirmed working, so it has none here too).
+  redirect-uri: ${AZURE_REDIRECT_URI:https://practice-dashboard-dev.sandhata.com,https://new-practice-dashboard-dev.sandhata.com}
   scopes: ${AZURE_SCOPES:openid profile email}
 
 # Session JWT — the gateway's own token, set as an HttpOnly cookie after a
