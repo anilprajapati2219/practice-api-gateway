@@ -17,8 +17,10 @@ spring:
           '[/**]':
             allowedOrigins:
               - "https://practice-dashboard-dev.sandhata.com"
+              - "https://new-practice-dashboard-dev.sandhata.com"
               - "https://intranet.sandhata.com"
               - "http://localhost:4200"
+              - "http://localhost:5173"
               - "http://localhost:8080"
             allowedMethods:
               - GET
@@ -51,8 +53,20 @@ spring:
             - RemoveRequestHeader=X-Internal-Role
             - RemoveRequestHeader=X-Internal-Email
 
+        # ─── Static Frontend (React new UI) ───────────────────────────────────
+        # Traffic for the new UI's own domain goes to the React app's
+        # service instead of the Angular-serving backend below. This route
+        # MUST come before the generic "frontend" route — Spring Cloud
+        # Gateway uses the first matching route, and the one below has no
+        # Host restriction so it matches every domain.
+        - id: frontend-new-ui
+          uri: ${NEW_UI_FRONTEND_URL:http://practice-dashboard-service-new-ui.practice-dashboard-new-ui-dev.svc.cluster.local:80}
+          predicates:
+            - Host=new-practice-dashboard-dev.sandhata.com
+            - Path=/**
+
         # ─── Static Frontend (Angular) ────────────────────────────────────────
-        # All other requests go to the Angular frontend
+        # Any other host's non-/api/** requests go to the Angular frontend
         - id: frontend
           uri: ${FRONTEND_URL:http://localhost:4200}
           predicates:
@@ -69,7 +83,13 @@ azure:
   # Provided by IT once the SPA -> Web migration is complete. Must come from
   # a k8s secret in every real environment — never commit a real value here.
   client-secret: ${AZURE_CLIENT_SECRET:}
-  redirect-uri: ${AZURE_REDIRECT_URI:https://practice-dashboard-dev.sandhata.com}
+  # Comma-separated list of every redirect URI Microsoft is allowed to send
+  # a code back to — one per frontend domain (Angular's, React's, ...).
+  # AuthCallbackController validates whatever redirectUri each frontend
+  # sends against this list before using it in the token exchange — it
+  # must match exactly what that frontend used in its own /authorize call,
+  # trailing slash included.
+  redirect-uri: ${AZURE_REDIRECT_URI:https://practice-dashboard-dev.sandhata.com/,https://new-practice-dashboard-dev.sandhata.com/}
   scopes: ${AZURE_SCOPES:openid profile email}
 
 # Session JWT — the gateway's own token, set as an HttpOnly cookie after a
