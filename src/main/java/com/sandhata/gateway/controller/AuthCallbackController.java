@@ -173,7 +173,8 @@ public class AuthCallbackController {
                                 return ResponseEntity.ok(Map.<String, Object>of(
                                         "email", email,
                                         "name", name != null ? name : "",
-                                        "role", userContext.getRole().name()
+                                        "role", userContext.getRole().name(),
+                                        "practice", userContext.getPractice() != null ? userContext.getPractice() : ""
                                 ));
                             });
                 })
