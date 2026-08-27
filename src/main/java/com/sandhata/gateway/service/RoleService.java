@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
+import java.time.Year;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -46,12 +47,21 @@ public class RoleService {
 
         log.debug("Role cache miss for: {} — fetching from backend", email);
 
-        // Call backend to get user details by email
+        // Call backend to get user details by email. A person can have one
+        // row per year now (same as Business/Marketing/etc.), so this must
+        // be scoped to a specific year — using the current calendar year
+        // means "who is this person right now." If that year's roster
+        // hasn't been loaded yet, the backend falls back to role=USER,
+        // practice="" (same safe-default pattern as any other missing data).
+        int currentYear = Year.now().getValue();
         return webClientBuilder
                 .baseUrl(practiceServiceUrl)
                 .build()
                 .get()
-                .uri("/api/integration/getIntegratorByEmail/{email}", email)
+                .uri(uriBuilder -> uriBuilder
+                        .path("/api/integration/getIntegratorByEmail/{email}")
+                        .queryParam("year", currentYear)
+                        .build(email))
                 .retrieve()
                 .bodyToMono(Map.class)
                 .map(response -> {
