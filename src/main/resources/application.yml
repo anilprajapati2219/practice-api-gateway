@@ -32,6 +32,53 @@ spring:
             allowCredentials: true
 
       routes:
+        # ───practice gateway ───────────────────────────────────────────────
+        - id: projects-service
+          uri: https://dev.api-practicegateway.sandhata.com
+          predicates:
+            - Path=/api/v1/projects/**
+          filters:
+            - RemoveRequestHeader=X-Internal-Role
+            - RemoveRequestHeader=X-Internal-Email
+
+
+        # ─── Users Service ──────────────────────────────────────────────────
+        - id: users-service
+          uri: https://dev.api-practicegateway.sandhata.com
+          predicates:
+            - Path=/api/v1/users/**
+          filters:
+            - RemoveRequestHeader=X-Internal-Role
+            - RemoveRequestHeader=X-Internal-Email
+
+
+        # ─── Dashboard Analytics ────────────────────────────────────────────
+        - id: dashboard-analytics-service
+          uri: https://dev.api-practicegateway.sandhata.com
+          predicates:
+            - Path=/api/v1/dashboard/analytics/**
+          filters:
+            - RemoveRequestHeader=X-Internal-Role
+            - RemoveRequestHeader=X-Internal-Email
+
+
+        # ─── Feedback Service ───────────────────────────────────────────────
+        - id: feedback-service
+          uri: https://dev.api-practicegateway.sandhata.com
+          predicates:
+            - Path=/api/v1/feedback/**
+          filters:
+            - RemoveRequestHeader=X-Internal-Role
+            - RemoveRequestHeader=X-Internal-Email
+
+        # ─── Purposes Service - Admin Only ───────────────────────────────────
+        - id: purposes-service
+          uri: https://dev.api-practicegateway.sandhata.com
+          predicates:
+            - Path=/api/v1/purposes/**
+          filters:
+            - RemoveRequestHeader=X-Internal-Role
+            - RemoveRequestHeader=X-Internal-Email
 
         # ─── Practice Dashboard Service (main backend) ───────────────────────
         # All /api/** requests go to the practice dashboard backend service,

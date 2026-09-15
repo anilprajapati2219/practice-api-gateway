@@ -41,4 +41,26 @@ public class SecurityConfig {
 
         return http.build();
     }
+
+
+    @Bean
+    public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
+
+        return http
+                .csrf(ServerHttpSecurity.CsrfSpec::disable)
+                .authorizeExchange(exchange -> exchange
+
+                        // Admin only
+                        .pathMatchers("/api/v1/purposes/**")
+                        .hasRole("ADMIN")
+
+                        // Other authenticated APIs
+                        .pathMatchers("/api/**")
+                        .authenticated()
+
+                        .anyExchange()
+                        .permitAll()
+                )
+                .build();
+    }
 }
