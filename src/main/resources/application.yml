@@ -140,7 +140,7 @@ azure:
   # identical to what's registered in Azure and what that frontend used in
   # its own /authorize call (trailing slash or not — Angular's is
   # registered WITHOUT one, confirmed working, so it has none here too).
-  redirect-uri: ${AZURE_REDIRECT_URI:https://practice-dashboard-dev.sandhata.com,https://new-practice-dashboard-dev.sandhata.com,http://localhost:5173}
+  redirect-uri: ${AZURE_REDIRECT_URI:https://practice-dashboard-dev.sandhata.com,https://new-practice-dashboard-dev.sandhata.com,http://localhost:5173,http://localhost:5173/home}
   scopes: ${AZURE_SCOPES:openid profile email}
 
 # Session JWT — the gateway's own token, set as an HttpOnly cookie after a
