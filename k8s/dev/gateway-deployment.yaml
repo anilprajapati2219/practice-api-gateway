@@ -68,6 +68,9 @@ spec:
                   key: JWT_SECRET
                   optional: true
 
+            - name: COOKIE_SAME_SITE
+              value: "None"
+
             - name: PRACTICE_DASHBOARD_SERVICE_URL
               value: "http://integration-dashboard-service.integration-dashboard-dev.svc.cluster.local:80"
 

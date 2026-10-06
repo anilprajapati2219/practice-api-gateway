@@ -156,6 +156,7 @@ app:
   cookie:
     # Must be true (HTTPS-only cookie) everywhere except plain-http localhost.
     secure: ${COOKIE_SECURE:true}
+    same-site: ${COOKIE_SAME_SITE:Lax}
 
 # Role based access configuration — read by RoleAccessProperties.
 # Rules are evaluated top to bottom, first match wins, so specific paths

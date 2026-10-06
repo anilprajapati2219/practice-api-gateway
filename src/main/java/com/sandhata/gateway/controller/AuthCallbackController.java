@@ -89,6 +89,15 @@ public class AuthCallbackController {
     @Value("${app.cookie.secure:true}")
     private boolean cookieSecure;
 
+    // Lax in prod. Dev sets None so a frontend on localhost (a different
+
+    // site) can receive and send the session cookie.
+
+    @Value("${app.cookie.same-site:Lax}")
+
+    private String cookieSameSite;
+
+
     // Every redirect URI we're willing to use in a token exchange — one per
     // frontend domain (Angular, React, ...). Populated from azure.redirect-uri.
     private List<String> allowedRedirectUris;
@@ -163,7 +172,7 @@ public class AuthCallbackController {
                                 ResponseCookie cookie = ResponseCookie.from(SessionJwtService.COOKIE_NAME, sessionToken)
                                         .httpOnly(true)
                                         .secure(cookieSecure)
-                                        .sameSite("Lax")
+                                        .sameSite(cookieSameSite)
                                         .path("/")
                                         .maxAge(sessionJwtService.getExpirationSeconds())
                                         .build();
@@ -243,7 +252,7 @@ public class AuthCallbackController {
         ResponseCookie expired = ResponseCookie.from(SessionJwtService.COOKIE_NAME, "")
                 .httpOnly(true)
                 .secure(cookieSecure)
-                .sameSite("Lax")
+                .sameSite(cookieSameSite)
                 .path("/")
                 .maxAge(0)
                 .build();
