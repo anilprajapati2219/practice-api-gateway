@@ -2,8 +2,9 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: practice-dashboard-gateway
+  namespace: practice-dashboard-gateway
 spec:
-  replicas: 1
+  replicas: 2
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -22,22 +23,68 @@ spec:
           image: docker.io/library/practice-dashboard-gateway:latest
           imagePullPolicy: Never
           ports:
-            - containerPort: 8080
+            - containerPort: 8098
           env:
             - name: AZURE_TENANT_ID
               valueFrom:
                 secretKeyRef:
-                  name: integration-dashboard-db-secret
+                  name: practice-dashboard-gateway-secret
                   key: AZURE_TENANT_ID
 
             - name: AZURE_CLIENT_ID
               valueFrom:
                 secretKeyRef:
-                  name: integration-dashboard-db-secret
+                  name: practice-dashboard-gateway-secret
                   key: AZURE_CLIENT_ID
 
+            # Was never wired up before — this is why token exchange failed
+            # with AADSTS7000218 (missing client_secret): the gateway was
+            # always sending an empty string. `optional: true` so the pod
+            # still starts (and just fails auth cleanly) if the key is ever
+            # briefly absent, instead of crash-looping.
+            - name: AZURE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: practice-dashboard-gateway-secret
+                  key: AZURE_CLIENT_SECRET
+                  optional: true
+
+            # Must exactly match both the redirect URI registered in
+            # Azure's "Web" platform AND what each frontend's own config
+            # sends — OAuth requires the identical redirect_uri string on
+            # the /authorize and /token calls, trailing slash included
+            # (Angular's is registered without one).
+            - name: AZURE_REDIRECT_URI
+              valueFrom:
+                secretKeyRef:
+                  name: practice-dashboard-gateway-secret
+                  key: AZURE_REDIRECT_URI
+                  optional: true
+
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: practice-dashboard-gateway-secret
+                  key: JWT_SECRET
+                  optional: true
+
+            - name: COOKIE_SAME_SITE
+              value: "None"
+
             - name: PRACTICE_DASHBOARD_SERVICE_URL
-              value: "http://integration-dashboard-service:8081"
+              value: "http://integration-dashboard-service.integration-dashboard-dev.svc.cluster.local:80"
 
             - name: FRONTEND_URL
-              value: "http://integration-dashboard-app:8081"
+              value: "http://integration-dashboard-service.integration-dashboard-dev.svc.cluster.local:80"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8098
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8098
+            initialDelaySeconds: 30
+            periodSeconds: 20

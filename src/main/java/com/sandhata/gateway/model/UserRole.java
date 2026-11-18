@@ -1,33 +1,84 @@
 package com.sandhata.gateway.model;
 
 /**
- * Roles available in Practice Dashboard.
- * These roles are stored in the Integrators table
- * and assigned to each user by their email.
+ * Roles available in Practice Dashboard, stored in the {@code role} column
+ * of the Integrators table and looked up by email
+ * ({@code /api/integration/getIntegratorByEmail/{email}}).
+ *
+ * Privilege order, highest to lowest:
+ *   ADMIN &gt; PRACTICE_HEAD &gt; FUNCTION_LEAD &gt; TEAM_LEAD &gt; USER
+ *
+ * {@link #rank} encodes that order so access checks are simple numeric
+ * comparisons (see {@link com.sandhata.gateway.config.RoleAccessProperties}
+ * and {@code JwtAuthenticationFilter}). A role can access anything that
+ * requires a rank less than or equal to its own.
  */
 public enum UserRole {
 
     /**
-     * Full access — can add announcements, manage panel,
-     * view all data across all practices.
+     * Default role — authenticated but not specially privileged.
+     * Also the safe fallback when a user isn't found in the Integrators
+     * table, or the role value on their record isn't recognized.
      */
-    ADMIN,
+    USER(1),
 
     /**
-     * Can view all data for their practice,
-     * can access business, marketing, training APIs.
+     * Leads a team under a function.
      */
-    MANAGER,
+    TEAM_LEAD(2),
 
     /**
-     * Read-only access — can view dashboard data
-     * but cannot add or modify anything.
+     * Leads a function; can see data belonging to their function
+     * (and everything a Team Lead can see).
      */
-    VIEWER,
+    FUNCTION_LEAD(3),
 
     /**
-     * Default role when user is authenticated but
-     * not found in the Integrators table.
+     * Oversees an entire practice; can see data across all functions
+     * and teams within their practice.
      */
-    GUEST
+    PRACTICE_HEAD(4),
+
+    /**
+     * Full access — superuser across all practices.
+     */
+    ADMIN(5);
+
+    private final int rank;
+
+    UserRole(int rank) {
+        this.rank = rank;
+    }
+
+    public int getRank() {
+        return rank;
+    }
+
+    /**
+     * True if this role's privilege is greater than or equal to
+     * {@code required} — i.e. this role is allowed to access something
+     * that requires at least {@code required}.
+     */
+    public boolean atLeast(UserRole required) {
+        return this.rank >= required.rank;
+    }
+
+    /**
+     * Parses a role value coming from the Integrators table / backend
+     * response. Case-insensitive and tolerant of spaces
+     * (e.g. "Function Lead", "function_lead", "FUNCTION_LEAD" all match
+     * {@link #FUNCTION_LEAD}). Falls back to {@link #USER} for anything
+     * unrecognized, null, or blank — never throws.
+     */
+    public static UserRole parse(String value) {
+        if (value == null || value.isBlank()) {
+            return USER;
+        }
+        String normalized = value.trim().toUpperCase().replace(' ', '_').replace('-', '_');
+        try {
+            return UserRole.valueOf(normalized);
+        } catch (IllegalArgumentException e) {
+            return USER;
+        }
+    }
 }

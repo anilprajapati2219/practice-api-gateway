@@ -30,13 +30,12 @@
             <artifactId>spring-cloud-starter-gateway</artifactId>
         </dependency>
 
-        <!-- Spring Security + OAuth2 Resource Server for JWT validation -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
-        </dependency>
-
-        <!-- Spring Security -->
+        <!-- Spring Security (WebFlux) — used only to wire the security filter
+             chain (permitAll + our own JwtAuthenticationFilter GlobalFilter
+             does the real enforcement). We no longer use the OAuth2 Resource
+             Server module: the gateway never validates Azure AD tokens
+             directly — it exchanges the auth code server-side and issues its
+             own session JWT (BFF pattern), so that dependency was removed. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
@@ -59,6 +58,28 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- JJWT — mint and validate the gateway's own session JWT (BFF pattern).
+             We do NOT use this to validate Azure AD tokens — Azure's code is
+             exchanged server-side (AuthCallbackController) and we issue our
+             own signed session token, stored in an HttpOnly cookie. -->
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+            <version>0.12.6</version>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <version>0.12.6</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <version>0.12.6</version>
+            <scope>runtime</scope>
         </dependency>
 
         <!-- Test -->

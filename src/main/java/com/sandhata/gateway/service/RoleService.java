@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
+import java.time.Year;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -46,40 +47,50 @@ public class RoleService {
 
         log.debug("Role cache miss for: {} — fetching from backend", email);
 
-        // Call backend to get user details by email
+        // Call backend to get user details by email. A person can have one
+        // row per year now (same as Business/Marketing/etc.), so this must
+        // be scoped to a specific year — using the current calendar year
+        // means "who is this person right now." If that year's roster
+        // hasn't been loaded yet, the backend falls back to role=USER,
+        // practice="" (same safe-default pattern as any other missing data).
+        int currentYear = Year.now().getValue();
         return webClientBuilder
                 .baseUrl(practiceServiceUrl)
                 .build()
                 .get()
-                .uri("/api/integration/getIntegratorByEmail/{email}", email)
+                .uri(uriBuilder -> uriBuilder
+                        .path("/api/integration/getIntegratorByEmail/{email}")
+                        .queryParam("year", currentYear)
+                        .build(email))
                 .retrieve()
                 .bodyToMono(Map.class)
                 .map(response -> {
-                    String role = response.getOrDefault("role", "VIEWER").toString();
+                    String role = response.getOrDefault("role", "USER").toString();
                     String practice = response.getOrDefault("practice", "").toString();
 
                     UserContext context = UserContext.builder()
                             .email(email)
                             .name(name)
                             .practice(practice)
-                            .role(parseRole(role))
+                            .role(UserRole.parse(role))
                             .build();
 
                     // Cache the result
                     roleCache.put(email, context);
-                    log.info("User {} assigned role: {} practice: {}", email, role, practice);
+                    log.info("User {} assigned role: {} practice: {}", email, context.getRole(), practice);
                     return context;
                 })
                 .onErrorResume(error -> {
-                    // If backend call fails or user not found — assign GUEST role
-                    log.warn("Could not fetch role for {} — assigning GUEST. Error: {}", email, error.getMessage());
-                    UserContext guestContext = UserContext.builder()
+                    // If backend call fails or user not found — fall back to
+                    // the lowest-privilege role rather than failing login.
+                    log.warn("Could not fetch role for {} — assigning USER. Error: {}", email, error.getMessage());
+                    UserContext fallbackContext = UserContext.builder()
                             .email(email)
                             .name(name)
                             .practice("")
-                            .role(UserRole.GUEST)
+                            .role(UserRole.USER)
                             .build();
-                    return Mono.just(guestContext);
+                    return Mono.just(fallbackContext);
                 });
     }
 
@@ -97,13 +108,5 @@ public class RoleService {
     public void clearAllCache() {
         roleCache.clear();
         log.info("Role cache cleared");
-    }
-
-    private UserRole parseRole(String role) {
-        try {
-            return UserRole.valueOf(role.toUpperCase());
-        } catch (Exception e) {
-            return UserRole.VIEWER;
-        }
     }
 }
